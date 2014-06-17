@@ -5,56 +5,59 @@ An idea starts life as an unsaved idea, with just a stock and an open date.
 When it gets saved, it becomes a saved idea, which also has an ID. When it gets
 closed, it becomes a closed idea, which also has a close date.
 
-A way we came up with to model this is with separate classes for each stage in
-the lifecycle. In each class, there is a reference to an instance of the class
-for the previous stage, and also the fields introduced in that stage.
+An exciting way to model this is with a higher-kinded type. Idea has two
+covariant higher-kinded type parameters, both bounded to be subtypes of Option,
+which are then used to define the ID and close date fields. Uses of the Idea
+type in the program bind the parameters to appropriate subtypes of Option (Some
+if the value should be present, None if it shouldn't, or Option if they don't
+care).
 
 This offers compile-time protection against trying to perform operations on
-ideas which are in the wrong stage of their lifecycle. It does not require code
-duplication. However, it is rather clumsy to use.
+ideas which are in the wrong stage of their lifecycle. It requires no code
+duplication.
 
-This is similar to how struct inheritance works in Go, as it happens.
+Two weaknesses with this approach are that it requires redundant Option
+boilerplate (eg having to pass Some(x) instead of x to a constructor) and that
+it involves a scary wizard-level Scala feature, the higher-kinded type.
 */
 
-case class UnsavedIdea(stock: String, openDate: Date)
-case class SavedIdea(id: String, parent: UnsavedIdea)
-case class ClosedIdea(parent: SavedIdea, closeDate: Date)
+case class Idea[+IfSaved[_] <: Option[_], +IfClosed[_] <: Option[_]](id: IfSaved[String], stock: String, openDate: Date, closeDate: IfClosed[Date])
 
 object FunctionsThatTakeIdeas {
 	// something that does not require any additional fields
-	def format(idea: UnsavedIdea): String = {
+	def format(idea: Idea[Option, Option]): String = {
 		idea.stock + "@" + idea.openDate
 	}
 	
 	// something that requires an ID
-	def query(idea: SavedIdea): String = {
-		idea.id
+	def query(idea: Idea[Some, Option]): String = {
+		idea.id.get
 	}
 	
 	// something that requires a close date
-	def duration(idea: ClosedIdea): Long = {
-		idea.closeDate.getTime - idea.parent.parent.openDate.getTime
+	def duration(idea: Idea[Option, Some]): Long = {
+		idea.closeDate.get.getTime - idea.openDate.getTime
 	}
 }
 
 object Main {
 	def main(args: Array[String]): Unit = {
-		val unsaved = UnsavedIdea("VOD.L", new Date())
+		val unsaved = Idea(None, "VOD.L", new Date(), None)
 		println("unsaved: " + unsaved)
 		FunctionsThatTakeIdeas.format(unsaved)
 		// FunctionsThatTakeIdeas.query(unsaved) // forbidden
 		// FunctionsThatTakeIdeas.duration(unsaved) // forbidden
 		
-		val saved = SavedIdea("beefc4c3", unsaved)
+		val saved = unsaved.copy(id = Some("beefc4c3"))
 		println("saved: " + saved)
-		FunctionsThatTakeIdeas.format(saved.parent)
+		FunctionsThatTakeIdeas.format(saved)
 		FunctionsThatTakeIdeas.query(saved)
 		// FunctionsThatTakeIdeas.duration(saved) // forbidden
 		
-		val closed = ClosedIdea(saved, new Date())
+		val closed = saved.copy(closeDate = Some(new Date()))
 		println("closed: " + closed)
-		FunctionsThatTakeIdeas.format(closed.parent.parent)
-		FunctionsThatTakeIdeas.query(closed.parent)
+		FunctionsThatTakeIdeas.format(closed)
+		FunctionsThatTakeIdeas.query(closed)
 		FunctionsThatTakeIdeas.duration(closed)
 	}
 }
