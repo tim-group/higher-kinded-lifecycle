@@ -6,26 +6,23 @@ When it gets saved, it becomes a saved idea, which also has an ID. When it gets
 closed, it becomes a closed idea, which also has a close date.
 
 A way we came up with to model this is with separate classes for each stage in
-the lifecycle. In each class, only the appropriate fields are present.
+the lifecycle. In each class, there is a reference to an instance of the class
+for the previous stage, and also the fields introduced in that stage.
 
 This offers compile-time protection against trying to perform operations on
-ideas which are in the wrong stage of their lifecycle. However, it requires
-considerable code duplication.
+ideas which are in the wrong stage of their lifecycle. It does not require code
+duplication. However, it is rather clumsy to use.
+
+This is similar to how struct inheritance works in Go, as it happens.
 */
 
 case class UnsavedIdea(stock: String, openDate: Date)
-case class SavedIdea(id: String, stock: String, openDate: Date)
-case class ClosedIdea(id: String, stock: String, openDate: Date, closeDate: Date)
+case class SavedIdea(id: String, parent: UnsavedIdea)
+case class ClosedIdea(parent: SavedIdea, closeDate: Date)
 
 object FunctionsThatTakeIdeas {
 	// something that does not require any additional fields
 	def format(idea: UnsavedIdea): String = {
-		idea.stock + "@" + idea.openDate
-	}
-	def format(idea: SavedIdea): String = {
-		idea.stock + "@" + idea.openDate
-	}
-	def format(idea: ClosedIdea): String = {
 		idea.stock + "@" + idea.openDate
 	}
 	
@@ -33,13 +30,10 @@ object FunctionsThatTakeIdeas {
 	def query(idea: SavedIdea): String = {
 		idea.id
 	}
-	def query(idea: ClosedIdea): String = {
-		idea.id
-	}
 	
 	// something that requires a close date
 	def duration(idea: ClosedIdea): Long = {
-		idea.closeDate.getTime - idea.openDate.getTime
+		idea.closeDate.getTime - idea.parent.parent.openDate.getTime
 	}
 }
 
@@ -51,16 +45,16 @@ object Main {
 		// FunctionsThatTakeIdeas.query(unsaved) // forbidden
 		// FunctionsThatTakeIdeas.duration(unsaved) // forbidden
 		
-		val saved = SavedIdea("beefc4c3", unsaved.stock, unsaved.openDate)
+		val saved = SavedIdea("beefc4c3", unsaved)
 		println("saved: " + saved)
-		FunctionsThatTakeIdeas.format(saved)
+		FunctionsThatTakeIdeas.format(saved.parent)
 		FunctionsThatTakeIdeas.query(saved)
 		// FunctionsThatTakeIdeas.duration(saved) // forbidden
 		
-		val closed = ClosedIdea(saved.id, saved.stock, saved.openDate, new Date())
+		val closed = ClosedIdea(saved, new Date())
 		println("closed: " + closed)
-		FunctionsThatTakeIdeas.format(closed)
-		FunctionsThatTakeIdeas.query(closed)
+		FunctionsThatTakeIdeas.format(closed.parent.parent)
+		FunctionsThatTakeIdeas.query(closed.parent)
 		FunctionsThatTakeIdeas.duration(closed)
 	}
 }
